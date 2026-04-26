@@ -34,9 +34,12 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
-    // MIDI note → instrument index; -1 = unmapped
-    // Placeholder chromatic layout (C2–D#3), finalised after iteration 1
-    int midiNoteForInstrument[16];
+    // Written on message thread, read on audio thread
+    std::atomic<int>  midiNoteForInstrument[16];
+    std::atomic<bool> triggerRequests[16];
+
+    void setMidiNote(int instrument, int note);
+    void requestTrigger(int instrument);
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
@@ -45,13 +48,9 @@ private:
     VoicePool  voicePool;
     bool       samplesLoaded = false;
 
-    // Cached raw pointers for audio-thread param reads
     std::atomic<float>* volParams [16] = {};
     std::atomic<float>* panParams [16] = {};
     std::atomic<float>* muteParams[16] = {};
-
-    // Reverse lookup: MIDI note number → instrument index
-    int noteToInstrument[128];
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(HexaCubeProcessor)
 };

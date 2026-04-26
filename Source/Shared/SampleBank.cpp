@@ -12,7 +12,7 @@ void SampleBank::load()
             for (int rr = 0; rr < 4; ++rr)
             {
                 char name[32];
-                std::snprintf(name, sizeof(name), "snd%02d_vel%02d_rr%02d_wav",
+                std::snprintf(name, sizeof(name), "snd%02dvel%02drr%02d_wav",
                               inst + 1, vel + 1, rr + 1);
 
                 int dataSize = 0;

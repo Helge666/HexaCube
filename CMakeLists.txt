@@ -54,6 +54,7 @@ target_sources(HexaCube PRIVATE
     ${HEXACUBE_ENGINE_SOURCES}
     Source/Plugin/PluginProcessor.cpp
     Source/Plugin/PluginEditor.cpp
+    Source/Plugin/InstrumentStrip.cpp
 )
 
 target_include_directories(HexaCube PRIVATE Source)
@@ -109,7 +110,11 @@ target_link_libraries(HexaCube_Config
 )
 
 # ─── MinGW: statically link runtime so no MinGW DLLs need to ship ────────────
-if(MINGW)
-    target_link_options(HexaCube      PRIVATE -static-libstdc++ -static-libgcc -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic)
-    target_link_options(HexaCube_Config PRIVATE -static-libstdc++ -static-libgcc -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic)
+if(WIN32)
+    set(_mingw_static -static-libstdc++ -static-libgcc
+        -Wl,--whole-archive /usr/x86_64-w64-mingw32/lib/libwinpthread.a -Wl,--no-whole-archive)
+    target_link_options(HexaCube               PRIVATE ${_mingw_static})
+    target_link_options(HexaCube_VST3          PRIVATE ${_mingw_static})
+    target_link_options(HexaCube_Config        PRIVATE ${_mingw_static})
+    target_link_options(HexaCube_Config_Standalone PRIVATE ${_mingw_static})
 endif()

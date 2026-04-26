@@ -1,26 +1,20 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "Shared/InstrumentData.h"
 
 HexaCubeProcessor::HexaCubeProcessor()
     : AudioProcessor(BusesProperties()
           .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       apvts(*this, nullptr, "HexaCubeState", createParameterLayout())
 {
-    // Cache APVTS raw parameter pointers for lock-free audio-thread access
     for (int i = 0; i < 16; ++i)
     {
         volParams [i] = apvts.getRawParameterValue("vol_"  + juce::String(i));
         panParams [i] = apvts.getRawParameterValue("pan_"  + juce::String(i));
         muteParams[i] = apvts.getRawParameterValue("mute_" + juce::String(i));
+        midiNoteForInstrument[i].store(DEFAULT_MIDI_NOTES[i]);
+        triggerRequests[i].store(false);
     }
-
-    // Placeholder MIDI note map: chromatic from C2 (36). Finalised after iteration 1.
-    for (int i = 0; i < 16; ++i)
-        midiNoteForInstrument[i] = 36 + i;
-
-    std::fill(std::begin(noteToInstrument), std::end(noteToInstrument), -1);
-    for (int i = 0; i < 16; ++i)
-        noteToInstrument[midiNoteForInstrument[i]] = i;
 }
 
 HexaCubeProcessor::~HexaCubeProcessor() {}
@@ -35,11 +29,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout HexaCubeProcessor::createPar
         const auto name = "Instrument " + id;
 
         layout.add(std::make_unique<juce::AudioParameterFloat>(
-            juce::ParameterID{ "vol_"  + id, 1 }, name + " Volume",
+            juce::ParameterID{ "vol_" + id, 1 }, name + " Volume",
             juce::NormalisableRange<float>(0.0f, 1.0f), 0.8f));
 
         layout.add(std::make_unique<juce::AudioParameterFloat>(
-            juce::ParameterID{ "pan_"  + id, 1 }, name + " Pan",
+            juce::ParameterID{ "pan_" + id, 1 }, name + " Pan",
             juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f));
 
         layout.add(std::make_unique<juce::AudioParameterBool>(
@@ -65,17 +59,35 @@ void HexaCubeProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
 {
     buffer.clear();
 
-    for (const auto metadata : midiMessages)
+    // UI trigger requests from message thread
+    for (int i = 0; i < 16; ++i)
     {
-        const auto msg = metadata.getMessage();
+        if (triggerRequests[i].exchange(false))
+        {
+            for (int j = 0; CHOKE_PAIRS[j][0] >= 0; ++j)
+                if (CHOKE_PAIRS[j][0] == i)
+                    voicePool.chokeInstrument(CHOKE_PAIRS[j][1]);
+            voicePool.noteOn(i, 100);
+        }
+    }
+
+    // Hardware / DAW MIDI input
+    for (const auto& meta : midiMessages)
+    {
+        const auto msg = meta.getMessage();
         if (msg.isNoteOn() && msg.getVelocity() > 0)
         {
             const int note = msg.getNoteNumber();
-            if (note >= 0 && note < 128)
+            for (int i = 0; i < 16; ++i)
             {
-                const int instrument = noteToInstrument[note];
-                if (instrument >= 0)
-                    voicePool.noteOn(instrument, msg.getVelocity());
+                if (midiNoteForInstrument[i].load() == note)
+                {
+                    for (int j = 0; CHOKE_PAIRS[j][0] >= 0; ++j)
+                        if (CHOKE_PAIRS[j][0] == i)
+                            voicePool.chokeInstrument(CHOKE_PAIRS[j][1]);
+                    voicePool.noteOn(i, msg.getVelocity());
+                    break;
+                }
             }
         }
     }
@@ -96,16 +108,28 @@ juce::AudioProcessorEditor* HexaCubeProcessor::createEditor()
     return new HexaCubeEditor(*this);
 }
 
+void HexaCubeProcessor::setMidiNote(int instrument, int note)
+{
+    jassert(instrument >= 0 && instrument < 16);
+    jassert(note >= 0 && note < 128);
+    midiNoteForInstrument[instrument].store(note);
+}
+
+void HexaCubeProcessor::requestTrigger(int instrument)
+{
+    jassert(instrument >= 0 && instrument < 16);
+    triggerRequests[instrument].store(true);
+}
+
 void HexaCubeProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
     auto xml   = std::make_unique<juce::XmlElement>("HexaCubeState");
     xml->addChildElement(state.createXml().release());
 
-    // Persist MIDI note assignments
     auto* noteMap = xml->createNewChildElement("MidiMap");
     for (int i = 0; i < 16; ++i)
-        noteMap->setAttribute("inst" + juce::String(i), midiNoteForInstrument[i]);
+        noteMap->setAttribute("inst" + juce::String(i), midiNoteForInstrument[i].load());
 
     copyXmlToBinary(*xml, destData);
 }
@@ -121,13 +145,9 @@ void HexaCubeProcessor::setStateInformation(const void* data, int sizeInBytes)
 
     if (auto* noteMap = xml->getChildByName("MidiMap"))
     {
-        std::fill(std::begin(noteToInstrument), std::end(noteToInstrument), -1);
         for (int i = 0; i < 16; ++i)
-        {
-            midiNoteForInstrument[i] = noteMap->getIntAttribute("inst" + juce::String(i),
-                                                                 36 + i);
-            noteToInstrument[midiNoteForInstrument[i]] = i;
-        }
+            midiNoteForInstrument[i].store(
+                noteMap->getIntAttribute("inst" + juce::String(i), DEFAULT_MIDI_NOTES[i]));
     }
 }
 
