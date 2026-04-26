@@ -1,5 +1,10 @@
 #pragma once
 #include <JuceHeader.h>
+#include <atomic>
+#include "InstrumentConfig.h"
+#include "Shared/SampleBank.h"
+#include "Shared/VoicePool.h"
+#include "Shared/InstrumentParams.h"
 
 class ConfigProcessor : public juce::AudioProcessor
 {
@@ -7,7 +12,7 @@ public:
     ConfigProcessor();
     ~ConfigProcessor() override;
 
-    void prepareToPlay(double, int) override;
+    void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
@@ -26,9 +31,29 @@ public:
     const juce::String getProgramName(int) override { return {}; }
     void changeProgramName(int, const juce::String&) override {}
 
-    void getStateInformation(juce::MemoryBlock&) override;
-    void setStateInformation(const void*, int) override;
+    void getStateInformation(juce::MemoryBlock&) override {}
+    void setStateInformation(const void*, int) override {}
+
+    // ── Config API (UI thread) ────────────────────────────────────────────────
+    const InstrumentConfig& getConfig(int instrument) const;
+    void setName(int instrument, const juce::String& name);
+    void setMidiNote(int instrument, int note);
+    void setChokeTarget(int instrument, int chokeTarget);
+    void setDisplayOrder(int instrument, int order);
+    void requestTrigger(int instrument);   // thread-safe: sets an atomic flag
+    void saveConfigToDisk() const;
+    juce::String generateCppHeader() const;
 
 private:
+    SampleBank sampleBank;
+    VoicePool  voicePool;
+    bool       samplesLoaded = false;
+
+    InstrumentConfig  configs[16];
+    std::atomic<bool> triggerRequests[16];
+
+    static juce::File getConfigFile();
+    void loadConfigFromDisk();
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ConfigProcessor)
 };

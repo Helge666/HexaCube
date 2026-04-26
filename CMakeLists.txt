@@ -93,6 +93,7 @@ target_sources(HexaCube_Config PRIVATE
     ${HEXACUBE_ENGINE_SOURCES}
     Source/Config/ConfigProcessor.cpp
     Source/Config/ConfigEditor.cpp
+    Source/Config/InstrumentPanel.cpp
 )
 
 target_include_directories(HexaCube_Config PRIVATE Source)
