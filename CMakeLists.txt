@@ -5,12 +5,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ─── Fetch JUCE ───────────────────────────────────────────────────────────────
-# Pin to a specific tag before shipping (e.g. GIT_TAG 8.0.x)
 include(FetchContent)
 FetchContent_Declare(
     JUCE
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    GIT_TAG        master
+    GIT_TAG        7.0.11
     GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(JUCE)
@@ -108,3 +107,9 @@ target_link_libraries(HexaCube_Config
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
+
+# ─── MinGW: statically link runtime so no MinGW DLLs need to ship ────────────
+if(MINGW)
+    target_link_options(HexaCube      PRIVATE -static-libstdc++ -static-libgcc -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic)
+    target_link_options(HexaCube_Config PRIVATE -static-libstdc++ -static-libgcc -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic)
+endif()
