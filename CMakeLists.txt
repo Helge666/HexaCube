@@ -28,6 +28,13 @@ set(HEXACUBE_COMPILE_DEFS
     JUCE_DISPLAY_SPLASH_SCREEN=0
 )
 
+# ─── Shared engine sources (compiled into both targets) ──────────────────────
+set(HEXACUBE_ENGINE_SOURCES
+    Source/Shared/SampleBank.cpp
+    Source/Shared/Voice.cpp
+    Source/Shared/VoicePool.cpp
+)
+
 # ─── Release plugin ───────────────────────────────────────────────────────────
 juce_add_plugin(HexaCube
     COMPANY_NAME                "voXager"
@@ -46,6 +53,7 @@ juce_add_plugin(HexaCube
 juce_generate_juce_header(HexaCube)
 
 target_sources(HexaCube PRIVATE
+    ${HEXACUBE_ENGINE_SOURCES}
     Source/Plugin/PluginProcessor.cpp
     Source/Plugin/PluginEditor.cpp
 )
@@ -82,6 +90,7 @@ juce_add_plugin(HexaCube_Config
 juce_generate_juce_header(HexaCube_Config)
 
 target_sources(HexaCube_Config PRIVATE
+    ${HEXACUBE_ENGINE_SOURCES}
     Source/Config/ConfigProcessor.cpp
     Source/Config/ConfigEditor.cpp
 )
